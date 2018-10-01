@@ -238,7 +238,6 @@
 				->end();
 		}
 
-
 		/**
 		 * Removes file(s).
 		 * `git rm <file>`
@@ -641,7 +640,10 @@
 
 			if($ret !== 0)
 			{
-				throw new GitException("Command '$cmd' failed (exit-code $ret).", $ret);
+			    if($output)
+				    throw new GitException("Command '$cmd' failed (exit-code $ret). \nOutput:\n  > " . implode("\n  > ", $output) . "\n\n", $ret);
+                else
+                    throw new GitException("Command '$cmd' failed (exit-code $ret).", $ret);
 			}
 
 			return $this;
@@ -666,11 +668,14 @@
 						{
 							$_c = "$key ";
 						}
-
-						$cmd[] = $_c . escapeshellarg($value);
+						if(substr($value, 0,2) == '--'){
+                            $cmd[] = $_c . $value;
+                        }else{
+                            $cmd[] = $_c . escapeshellarg($value);
+                        }
 					}
 				}
-				elseif(is_scalar($arg) && !is_bool($arg))
+				elseif(is_scalar($arg) && !is_bool($arg) && substr($arg, 0,2) != '--')
 				{
 					$cmd[] = escapeshellarg($arg);
 				}
@@ -717,6 +722,44 @@
 
 			return new static($repo);
 		}
+
+        /**
+         * Mirror repo in directory
+         * @param  string
+         * @param  string
+         * @return self
+         * @throws GitException
+         */
+		public static function mirror($directory, $url)
+        {
+            if(is_dir("$directory/.git"))
+            {
+                throw new GitException("Repo already exists in $directory.");
+            }
+
+            if(!is_dir($directory) && !@mkdir($directory, 0777, TRUE)) // intentionally @; not atomic; from Nette FW
+            {
+                throw new GitException("Unable to create directory '$directory'.");
+            }
+
+            $cwd = getcwd();
+            chdir($directory);
+            exec(self::processCommand(array(
+                'git clone --mirror',
+                $url,
+                $directory,
+            )), $output, $returnCode);
+
+            if($returnCode !== 0)
+            {
+                throw new GitException("Git mirror failed (directory $directory).");
+            }
+
+            $repo = getcwd();
+            chdir($cwd);
+
+            return new static($repo);
+        }
 
 
 		/**
